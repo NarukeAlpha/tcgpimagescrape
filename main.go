@@ -14,6 +14,11 @@ import (
 	sc "tcgpImageScrape/scrapeE"
 )
 
+var (
+	CatalogURL    = "https://mpapi.tcgplayer.com/v2/Catalog/CategoryFilters?mpfev=3118"
+	SetRequestURL = "https://mp-search-api.tcgplayer.com/v1/search/request?q=&isList=false"
+)
+
 func init() {
 	logfile, err := os.OpenFile("log"+strconv.Itoa(time.Now().Hour())+"-"+strconv.Itoa(time.Now().YearDay())+"-"+time.Now().Month().String()+"-"+strconv.Itoa(time.Now().Year())+".log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
@@ -34,7 +39,7 @@ func main() {
 	catrq, err := sc.NewScrapeHTTPRequest("GET")
 	sc.ErrorCheck(err, "Unable to create request for category")
 
-	err = sc.SetScrapeURL(catrq, "https://mpapi.tcgplayer.com/v2/Catalog/CategoryFilters?mpfev=3118")
+	err = sc.SetScrapeURL(catrq, CatalogURL)
 	sc.ErrorCheck(err, "Unable to set category URL")
 
 	response := sc.Response{}
@@ -62,6 +67,9 @@ func main() {
 		scanner.Scan()
 		input := scanner.Text()
 		categorySelection, err := strconv.Atoi(input)
+		if input == "exit" {
+			os.Exit(0)
+		}
 		if err != nil || categorySelection > len(response.Results) {
 			fmt.Println("Please enter a valid number: ")
 			time.Sleep(3000)
@@ -70,10 +78,10 @@ func main() {
 		}
 		setRequest, err := sc.NewScrapeHTTPRequest("POST")
 		sc.ErrorCheck(err, "Unable to create request for set")
-		err = sc.SetScrapeBody(setRequest, response.Results[categorySelection-1].UrlName)
+		err = sc.SetScrapeBody(setRequest, 0, response.Results[categorySelection-1].UrlName)
 		sc.ErrorCheck(err, "Unable to set body for set request")
 
-		err = sc.SetScrapeURL(setRequest, "https://mp-search-api.tcgplayer.com/v1/search/request?q=&isList=false")
+		err = sc.SetScrapeURL(setRequest, SetRequestURL)
 		sc.ErrorCheck(err, "Unable to set URL for set scrape")
 
 		setresp, err := client.Do(setRequest)
@@ -84,7 +92,9 @@ func main() {
 		sc.ErrorCheck(err, "Unable to decode set query response")
 		setlist := srVar.Results[0].Aggregations.SetName
 		divider := len(setlist) / 2
+		var setliststring []string
 		for i, result := range setlist {
+			setliststring = append(setliststring, result.Value)
 			if i == 0 || i%2 == 0 {
 				if i == divider && len(setlist)%i == 1 {
 					fmt.Printf("%-3v) %-30v \n", strconv.Itoa(i+1), result.Value)
@@ -109,7 +119,16 @@ func main() {
 		input = scanner.Text()
 		finput := strings.Fields(input)
 		sc.ClearTerminal()
-		sc.DownloadSets(response.Results[categorySelection-1].UrlName, finput)
+		var inputlist []string
+		for _, v := range finput {
+			value, err := strconv.Atoi(v)
+			if err != nil {
+				log.Panicln(err)
+			}
+			inputlist = append(inputlist, setliststring[value])
+		}
+
+		sc.DownloadSetsInfo(response.Results[categorySelection-1].UrlName, inputlist)
 
 	}
 }
